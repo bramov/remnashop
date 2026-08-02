@@ -13,10 +13,9 @@ from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
 from loguru import logger
 
-from src.application.common import Notifier, TranslatorRunner
+from src.application.common import BotService, Notifier, TranslatorRunner
 from src.application.common.dao import BroadcastDao, SettingsDao
-from src.application.dto import MediaDescriptorDto, MessagePayloadDto, UserDto
-from src.application.services import BotService
+from src.application.dto import MediaDescriptorDto, MessagePayloadDto, TelegramUserDto
 from src.application.use_cases.broadcast.commands.lifecycle import (
     CancelBroadcast,
     DeleteBroadcast,
@@ -26,10 +25,11 @@ from src.application.use_cases.broadcast.commands.lifecycle import (
 from src.application.use_cases.broadcast.queries.audience import (
     GetBroadcastAudienceCount,
     GetBroadcastAudienceCountDto,
+    HasAvailableBroadcastPlans,
 )
-from src.core.constants import USER_KEY
+from src.core.constants import TEXT_MAX_LENGTH, TEXT_MEDIA_MAX_LENGTH, USER_KEY
 from src.core.enums import BroadcastAudience, MediaType
-from src.telegram.keyboards import get_goto_buttons
+from src.telegram.keyboards import CLOSE_BUTTON_ID, get_broadcast_buttons
 from src.telegram.states import DashboardBroadcast
 from src.telegram.utils import is_double_click
 
@@ -45,7 +45,7 @@ def _update_payload(
         retort.load(raw_payload, MessagePayloadDto)
         if raw_payload
         else MessagePayloadDto(
-            i18n_key="ntf-broadcast.message",
+            i18n_key="raw-message",
             disable_default_markup=False,
             delete_after=None,
         )
@@ -64,7 +64,7 @@ async def on_broadcast_list(
     broadcast_dao: FromDishka[BroadcastDao],
     notifier: FromDishka[Notifier],
 ) -> None:
-    user: UserDto = dialog_manager.middleware_data[USER_KEY]
+    user: TelegramUserDto = dialog_manager.middleware_data[USER_KEY]
     broadcasts = await broadcast_dao.get_all()
 
     if not broadcasts:
@@ -92,8 +92,9 @@ async def on_audience_select(
     dialog_manager: DialogManager,
     notifier: FromDishka[Notifier],
     get_broadcast_audience_count: FromDishka[GetBroadcastAudienceCount],
+    has_available_plans: FromDishka[HasAvailableBroadcastPlans],
 ) -> None:
-    user: UserDto = dialog_manager.middleware_data[USER_KEY]
+    user: TelegramUserDto = dialog_manager.middleware_data[USER_KEY]
 
     if not callback.data:
         raise ValueError("Callback data is empty")
@@ -101,16 +102,17 @@ async def on_audience_select(
     audience = BroadcastAudience(remove_intent_id(callback.data)[-1])
     dialog_manager.dialog_data["audience_type"] = audience
 
-    audience_count = await get_broadcast_audience_count(
-        user, GetBroadcastAudienceCountDto(audience)
-    )
     if audience == BroadcastAudience.PLAN:
-        if audience_count == 0:
+        # The audience size is per-plan; here we only gate on plan availability.
+        if not await has_available_plans(user):
             await notifier.notify_user(user, i18n_key="ntf-broadcast.plans-unavailable")
             return
         await dialog_manager.switch_to(state=DashboardBroadcast.PLAN)
         return
 
+    audience_count = await get_broadcast_audience_count(
+        user, GetBroadcastAudienceCountDto(audience)
+    )
     if audience_count == 0:
         await notifier.notify_user(user, i18n_key="ntf-broadcast.audience-unavailable")
         return
@@ -128,7 +130,7 @@ async def on_plan_select(
     notifier: FromDishka[Notifier],
     get_broadcast_audience_count: FromDishka[GetBroadcastAudienceCount],
 ) -> None:
-    user: UserDto = dialog_manager.middleware_data[USER_KEY]
+    user: TelegramUserDto = dialog_manager.middleware_data[USER_KEY]
 
     audience_count = await get_broadcast_audience_count(
         user,
@@ -153,7 +155,7 @@ async def on_content_input(
     notifier: FromDishka[Notifier],
 ) -> None:
     dialog_manager.show_mode = ShowMode.EDIT
-    user: UserDto = dialog_manager.middleware_data[USER_KEY]
+    user: TelegramUserDto = dialog_manager.middleware_data[USER_KEY]
 
     media_type: Optional[MediaType] = None
     file_id: Optional[str] = None
@@ -164,6 +166,9 @@ async def on_content_input(
     elif message.video:
         media_type = MediaType.VIDEO
         file_id = message.video.file_id
+    elif message.animation:
+        media_type = MediaType.GIF
+        file_id = message.animation.file_id
     elif message.document:
         media_type = MediaType.DOCUMENT
         file_id = message.document.file_id
@@ -176,7 +181,7 @@ async def on_content_input(
         await notifier.notify_user(user, i18n_key="ntf-common.invalid-value")
         return
 
-    max_length = 1024 if file_id else 4096
+    max_length = TEXT_MEDIA_MAX_LENGTH if file_id else TEXT_MAX_LENGTH
     if message.html_text and len(message.html_text) > max_length:
         logger.warning(
             f"{user.log} Message text exceeds limit: '{len(message.html_text)}' > '{max_length}'"
@@ -212,7 +217,7 @@ async def on_button_select(
     i18n: FromDishka[TranslatorRunner],
     settings_dao: FromDishka[SettingsDao],
 ) -> None:
-    user: UserDto = dialog_manager.middleware_data[USER_KEY]
+    user: TelegramUserDto = dialog_manager.middleware_data[USER_KEY]
     selected_id = int(dialog_manager.item_id)  # type: ignore[attr-defined]
 
     buttons: list[dict] = dialog_manager.dialog_data.get("buttons", [])
@@ -223,17 +228,22 @@ async def on_button_select(
 
     settings = await settings_dao.get()
 
-    goto_buttons = get_goto_buttons(
+    all_buttons = get_broadcast_buttons(
         support_url=bot_service.get_support_url(text=i18n.get("message.help")),
         is_referral_enable=settings.referral.enable,
     )
+    goto_buttons = all_buttons[:-1]
 
-    builder = InlineKeyboardBuilder()
-    for button in buttons:
-        if button.get("selected"):
-            builder.row(goto_buttons[int(button["id"])])
+    if selected_id == CLOSE_BUTTON_ID:
+        close_selected = next((b["selected"] for b in buttons if b["id"] == CLOSE_BUTTON_ID), True)
+        _update_payload(dialog_manager, retort, disable_default_markup=not close_selected)
+    else:
+        builder = InlineKeyboardBuilder()
+        for button in buttons:
+            if button.get("selected") and button["id"] != CLOSE_BUTTON_ID:
+                builder.row(goto_buttons[int(button["id"])])
+        _update_payload(dialog_manager, retort, reply_markup=builder.as_markup().model_dump())
 
-    _update_payload(dialog_manager, retort, reply_markup=builder.as_markup().model_dump())
     logger.debug(f"{user.log} Updated payload keyboard: {buttons}")
 
 
@@ -245,7 +255,7 @@ async def on_preview(
     retort: FromDishka[Retort],
     notifier: FromDishka[Notifier],
 ) -> None:
-    user: UserDto = dialog_manager.middleware_data[USER_KEY]
+    user: TelegramUserDto = dialog_manager.middleware_data[USER_KEY]
     payload = dialog_manager.dialog_data.get("payload")
 
     if not payload or not payload["i18n_kwargs"].get("content") and not payload.get("media"):
@@ -253,6 +263,25 @@ async def on_preview(
         return
 
     await notifier.notify_user(user, payload=retort.load(payload, MessagePayloadDto))
+
+
+@inject
+async def on_view_preview(
+    callback: CallbackQuery,
+    widget: Button,
+    dialog_manager: DialogManager,
+    broadcast_dao: FromDishka[BroadcastDao],
+    notifier: FromDishka[Notifier],
+) -> None:
+    user: TelegramUserDto = dialog_manager.middleware_data[USER_KEY]
+    task_id = dialog_manager.dialog_data.get("task_id")
+    broadcast = await broadcast_dao.get_by_task_id(task_id) if task_id else None
+
+    if not broadcast or not broadcast.payload:
+        await notifier.notify_user(user, i18n_key="ntf-broadcast.content-empty")
+        return
+
+    await notifier.notify_user(user, payload=broadcast.payload)
 
 
 @inject
@@ -264,7 +293,7 @@ async def on_send(
     notifier: FromDishka[Notifier],
     start_broadcast: FromDishka[StartBroadcast],
 ) -> None:
-    user: UserDto = dialog_manager.middleware_data[USER_KEY]
+    user: TelegramUserDto = dialog_manager.middleware_data[USER_KEY]
     audience: Optional[BroadcastAudience] = dialog_manager.dialog_data.get("audience_type")
     plan_id = dialog_manager.dialog_data.get("plan_id")
     payload = dialog_manager.dialog_data.get("payload")
@@ -296,7 +325,7 @@ async def on_cancel(
     notifier: FromDishka[Notifier],
     cancel_broadcast: FromDishka[CancelBroadcast],
 ) -> None:
-    user: UserDto = dialog_manager.middleware_data[USER_KEY]
+    user: TelegramUserDto = dialog_manager.middleware_data[USER_KEY]
     task_id = dialog_manager.dialog_data["task_id"]
 
     try:
@@ -314,26 +343,13 @@ async def on_delete(
     notifier: FromDishka[Notifier],
     delete_broadcast: FromDishka[DeleteBroadcast],
 ) -> None:
-    user: UserDto = dialog_manager.middleware_data[USER_KEY]
+    user: TelegramUserDto = dialog_manager.middleware_data[USER_KEY]
     task_id = dialog_manager.dialog_data["task_id"]
 
     try:
+        # Deletion runs in the background; respond immediately. The task reports the
+        # result summary to admins on completion (see delete_broadcast_task).
+        await delete_broadcast(user, task_id)
         await notifier.notify_user(user, i18n_key="ntf-broadcast.deleting")
-
-        result = await delete_broadcast(user, task_id)
-
-        await notifier.notify_user(
-            user=user,
-            payload=MessagePayloadDto(
-                i18n_key="ntf-broadcast.deleted-success",
-                i18n_kwargs={
-                    "task_id": task_id,
-                    "total_count": result.total,
-                    "deleted_count": result.deleted,
-                    "failed_count": result.failed,
-                },
-                disable_default_markup=False,
-            ),
-        )
     except ValueError:
         await notifier.notify_user(user, i18n_key="ntf-broadcast.already-deleted")

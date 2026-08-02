@@ -4,6 +4,7 @@ from aiogram_dialog import DialogManager
 from aiogram_dialog.widgets.common import ManagedScroll
 from dishka import FromDishka
 from dishka.integrations.aiogram_dialog import inject
+from loguru import logger
 from remnapy import RemnawaveSDK
 
 from src.application.common import TranslatorRunner
@@ -17,20 +18,19 @@ async def system_getter(
     remnawave_sdk: FromDishka[RemnawaveSDK],
     **kwargs: Any,
 ) -> dict[str, Any]:
-    result = await remnawave_sdk.system.get_stats()
+    stats = await remnawave_sdk.system.get_stats()
     metadata = await remnawave_sdk.system.get_metadata()
-
+    logger.debug(f"Panel system stats: {stats}")
     return {
         "version": metadata.version,
-        "cpu_cores": result.cpu.physical_cores,
-        "cpu_threads": result.cpu.cores,
-        "ram_used": i18n_format_bytes_to_unit(result.memory.active),
-        "ram_total": i18n_format_bytes_to_unit(result.memory.total),
+        "cpu_cores": stats.cpu.cores,
+        "ram_used": i18n_format_bytes_to_unit(stats.memory.used),
+        "ram_total": i18n_format_bytes_to_unit(stats.memory.total),
         "ram_used_percent": percent(
-            part=result.memory.active or 0,
-            whole=result.memory.total,
+            part=stats.memory.used or 0,
+            whole=stats.memory.total,
         ),
-        "uptime": i18n_format_seconds(result.uptime),
+        "uptime": i18n_format_seconds(stats.uptime),
     }
 
 
@@ -83,10 +83,14 @@ async def hosts_getter(
             )
         )
 
+    if not hosts:
+        return {"pages": 0, "current_page": 0, "host": None, "is_empty": True}
+
     return {
         "pages": len(hosts),
         "current_page": current_page + 1,
         "host": hosts[current_page],
+        "is_empty": False,
     }
 
 
@@ -118,14 +122,20 @@ async def nodes_getter(
                 xray_uptime=i18n_format_seconds(node.xray_uptime),
                 users_online=node.users_online,
                 traffic_used=i18n_format_bytes_to_unit(node.traffic_used_bytes),
-                traffic_limit=i18n_format_bytes_to_unit(node.traffic_limit_bytes, round_up=True),
+                traffic_limit=i18n_format_bytes_to_unit(
+                    node.traffic_limit_bytes or None, round_up=True
+                ),
             )
         )
+
+    if not nodes:
+        return {"pages": 0, "current_page": 0, "node": None, "is_empty": True}
 
     return {
         "pages": len(nodes),
         "current_page": current_page + 1,
         "node": nodes[current_page],
+        "is_empty": False,
     }
 
 
@@ -158,8 +168,12 @@ async def inbounds_getter(
             )
         )
 
+    if not inbounds:
+        return {"pages": 0, "current_page": 0, "inbound": None, "is_empty": True}
+
     return {
         "pages": len(inbounds),
         "current_page": current_page + 1,
         "inbound": inbounds[current_page],
+        "is_empty": False,
     }
