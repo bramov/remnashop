@@ -48,7 +48,13 @@ from src.application.dto.payment_gateway import (
     YooKassaGatewaySettingsDto,
     YooMoneyGatewaySettingsDto,
 )
-from src.core.enums import MediaType, PaymentGatewayType, ReferralLevel, Role
+from src.core.enums import (
+    MediaType,
+    PaymentGatewayType,
+    PlategaAutopaymentInterval,
+    ReferralLevel,
+    Role,
+)
 from src.core.types import AnyKeyboard
 from src.infrastructure.database.models import PaymentGateway
 from src.infrastructure.redis.key_builder import StorageKey, serialize_storage_key
@@ -135,6 +141,7 @@ class RetortProvider(Provider):
             recipe=[
                 dumper(SecretStr, lambda v: v.get_secret_value()),
                 coercer(Role, Role, lambda v: Role(v)),
+                coercer(int, PlategaAutopaymentInterval, PlategaAutopaymentInterval),
                 #
                 coercer(dict, MessagePayloadDto, retort.get_loader(MessagePayloadDto)),
                 #

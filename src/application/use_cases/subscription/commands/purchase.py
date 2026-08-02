@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Optional
 
 from loguru import logger
@@ -102,6 +102,7 @@ class PurchaseSubscriptionDto:
     user: UserDto
     transaction: TransactionDto
     subscription: Optional[SubscriptionDto]
+    expire_at: Optional[datetime] = None
 
 
 class PurchaseSubscription(Interactor[PurchaseSubscriptionDto, None]):
@@ -140,6 +141,13 @@ class PurchaseSubscription(Interactor[PurchaseSubscriptionDto, None]):
             if purchase_type == PurchaseType.NEW and not has_trial:
                 created_user = await self.remnawave.create_user(user, plan=plan)
                 new_sub = self._build_subscription_dto(created_user, plan)
+                if data.expire_at is not None:
+                    new_sub.expire_at = data.expire_at
+                    await self.remnawave.update_user(
+                        user=user,
+                        uuid=new_sub.user_remna_id,
+                        subscription=new_sub,
+                    )
 
                 await self.subscription_dao.create(
                     subscription=new_sub,
@@ -162,7 +170,9 @@ class PurchaseSubscription(Interactor[PurchaseSubscriptionDto, None]):
 
                 duration = transaction.plan_snapshot.duration
 
-                if duration == 0:
+                if data.expire_at is not None:
+                    new_expire = data.expire_at
+                elif duration == 0:
                     new_expire = days_to_datetime(duration)  # unlimited
                 else:
                     base_date = max(subscription.expire_at, datetime_now())
@@ -211,6 +221,13 @@ class PurchaseSubscription(Interactor[PurchaseSubscriptionDto, None]):
                 )
 
                 new_sub = self._build_subscription_dto(updated_user, plan)
+                if data.expire_at is not None:
+                    new_sub.expire_at = data.expire_at
+                    await self.remnawave.update_user(
+                        user=user,
+                        uuid=new_sub.user_remna_id,
+                        subscription=new_sub,
+                    )
                 await self.subscription_dao.create(
                     subscription=new_sub,
                     user_id=user.id,

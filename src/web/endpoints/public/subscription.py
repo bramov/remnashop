@@ -37,6 +37,7 @@ from src.application.use_cases.subscription.commands.purchase import (
 from src.application.use_cases.user.queries.plans import GetAvailablePlans, GetAvailableTrial
 from src.core.enums import (
     PaymentGatewayType,
+    PlategaAutopaymentInterval,
     PurchaseType,
     TransactionStatus,
 )
@@ -100,6 +101,24 @@ def _assert_web_purchase_email_verified(user: UserDto) -> None:
         status_code=status.HTTP_409_CONFLICT,
         detail="Email must be verified before purchasing or extending a subscription",
     )
+
+
+def _validate_platega_autopayment_duration(
+    gateway_type: PaymentGatewayType,
+    duration_days: int,
+    *,
+    is_trial: bool,
+    is_free: bool,
+) -> None:
+    if gateway_type != PaymentGatewayType.PLATEGA or is_trial or is_free:
+        return
+    try:
+        PlategaAutopaymentInterval.from_duration_days(duration_days)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Platega autopay supports only 30, 90, 180, or 365 day durations",
+        ) from error
 
 
 async def _get_available_plan_by_code(
@@ -304,6 +323,7 @@ async def activate_trial_web(
                 discount_percent=pricing.discount_percent,
                 final_amount=str(pricing.final_amount),
                 is_free=pricing.is_free,
+                is_autopayment=False,
             )
         )
 
@@ -382,6 +402,7 @@ async def purchase_trial_web(
         is_free=pricing.is_free,
         final_amount=str(pricing.final_amount),
         currency=gateway.currency.symbol,
+        is_autopayment=False,
     )
 
 
@@ -423,6 +444,12 @@ async def purchase_subscription(
         duration.get_price(gateway.currency),
         gateway.currency,
     )
+    _validate_platega_autopayment_duration(
+        body.gateway_type,
+        duration.days,
+        is_trial=plan.is_trial,
+        is_free=pricing.is_free,
+    )
 
     payment = await create_payment(
         user,
@@ -453,6 +480,11 @@ async def purchase_subscription(
         is_free=pricing.is_free,
         final_amount=str(pricing.final_amount),
         currency=gateway.currency.symbol,
+        is_autopayment=(
+            body.gateway_type == PaymentGatewayType.PLATEGA
+            and not plan.is_trial
+            and not pricing.is_free
+        ),
     )
 
 
@@ -502,6 +534,12 @@ async def extend_subscription(
         duration.get_price(gateway.currency),
         gateway.currency,
     )
+    _validate_platega_autopayment_duration(
+        body.gateway_type,
+        duration.days,
+        is_trial=False,
+        is_free=pricing.is_free,
+    )
     plan_snapshot = PlanSnapshotDto.from_plan(matched_plan, duration.days)
     payment = await create_payment(
         user,
@@ -532,6 +570,9 @@ async def extend_subscription(
         is_free=pricing.is_free,
         final_amount=str(pricing.final_amount),
         currency=gateway.currency.symbol,
+        is_autopayment=(
+            body.gateway_type == PaymentGatewayType.PLATEGA and not pricing.is_free
+        ),
     )
 
 
@@ -580,6 +621,15 @@ async def get_subscription_offers(
                     price=duration.get_price(gateway.currency),
                     currency=gateway.currency,
                 )
+                if (
+                    not pricing.is_free
+                    and gateway.type == PaymentGatewayType.PLATEGA
+                    and not plan.is_trial
+                ):
+                    try:
+                        PlategaAutopaymentInterval.from_duration_days(duration.days)
+                    except ValueError:
+                        continue
                 prices.append(
                     DurationGatewayPriceResponse(
                         gateway_type=gateway.type,
@@ -589,6 +639,11 @@ async def get_subscription_offers(
                         discount_percent=pricing.discount_percent,
                         final_amount=str(pricing.final_amount),
                         is_free=pricing.is_free,
+                        is_autopayment=(
+                            gateway.type == PaymentGatewayType.PLATEGA
+                            and not plan.is_trial
+                            and not pricing.is_free
+                        ),
                     )
                 )
 

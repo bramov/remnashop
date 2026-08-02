@@ -1,4 +1,5 @@
 from dataclasses import asdict, dataclass, field
+from decimal import Decimal
 from typing import Any
 
 from remnapy.enums.users import TrafficLimitStrategy
@@ -100,6 +101,22 @@ class SubscriptionExpiresEvent(UserEvent):
             disable_default_markup=False,
             delete_after=None,
         )
+
+
+@dataclass(frozen=True, kw_only=True)
+class AutopaymentFailedEvent(UserEvent):
+    notification_type: NotificationType = field(
+        default=UserNotificationType.AUTOPAYMENT_FAILED,
+        init=False,
+    )
+
+    amount: Decimal
+    currency: str
+    is_trial: bool = field(default=False, init=False)
+
+    @property
+    def event_key(self) -> str:
+        return "event-subscription.autopayment-failed"
 
 
 @dataclass(frozen=True, kw_only=True)

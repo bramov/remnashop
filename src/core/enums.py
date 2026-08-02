@@ -112,6 +112,36 @@ class TransactionStatus(UpperStrEnum):
     FAILED = auto()
 
 
+class PlategaAutopaymentStatus(UpperStrEnum):
+    PENDING = auto()
+    ACTIVE = auto()
+    PAYMENT_FAILED = auto()
+    CANCELED = auto()
+    REPLACED = auto()
+
+
+class PlategaAutopaymentInterval(IntEnum):
+    ONE_MONTH = 1
+    THREE_MONTHS = 3
+    SIX_MONTHS = 6
+    ONE_YEAR = 12
+
+    @classmethod
+    def from_duration_days(cls, duration_days: int) -> "PlategaAutopaymentInterval":
+        interval_by_duration = {
+            30: cls.ONE_MONTH,
+            90: cls.THREE_MONTHS,
+            180: cls.SIX_MONTHS,
+            365: cls.ONE_YEAR,
+        }
+        try:
+            return interval_by_duration[duration_days]
+        except KeyError as error:
+            raise ValueError(
+                "Platega autopay supports only 30, 90, 180, or 365 day durations"
+            ) from error
+
+
 class SubscriptionStatus(UpperStrEnum):
     ACTIVE = auto()
     DISABLED = auto()
@@ -271,6 +301,7 @@ class UserNotificationType(UpperStrEnum):
     LIMITED = auto()
     NOT_CONNECTED = auto()
     TORRENT_BLOCKED = auto()
+    AUTOPAYMENT_FAILED = auto()
     #
     REFERRAL_ATTACHED = auto()
     REFERRAL_REWARD_RECEIVED = auto()

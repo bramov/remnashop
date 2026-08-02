@@ -2,6 +2,7 @@ from typing import Final
 
 from src.application.common.interactor import Interactor
 
+from .commands.autopayment import ProcessPlategaAutopayment
 from .commands.configuration import (
     MovePaymentGatewayUp,
     ResetPaymentGatewaySettingsField,
@@ -26,4 +27,5 @@ GATEWAYS_USE_CASES: Final[tuple[type[Interactor], ...]] = (
     CreatePayment,
     CreateTestPayment,
     ProcessPayment,
+    ProcessPlategaAutopayment,
 )

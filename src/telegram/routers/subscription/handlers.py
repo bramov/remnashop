@@ -12,6 +12,7 @@ from src.application.common import Notifier
 from src.application.common.dao import PaymentGatewayDao, PlanDao, SettingsDao, SubscriptionDao
 from src.application.dto import PlanDto, PlanSnapshotDto, SubscriptionDto, TelegramUserDto
 from src.application.services import PricingService
+from src.application.services.autopayment import supports_payment_duration
 from src.application.use_cases.gateways.commands.payment import (
     CreatePayment,
     CreatePaymentDto,
@@ -259,6 +260,26 @@ async def on_subscription_plans(  # noqa: C901
             dialog_manager.dialog_data["selected_duration"] = plans[0].durations[0].days
             dialog_manager.dialog_data["only_single_duration"] = True
 
+            gateways = [
+                gateway
+                for gateway in gateways
+                if pricing_service.calculate_for_duration(
+                    user,
+                    plans[0].durations[0],
+                    gateway.currency,
+                    apply_discount=not plans[0].is_trial,
+                ).is_free
+                or supports_payment_duration(
+                    gateway.type, plans[0].durations[0].days, is_trial=plans[0].is_trial
+                )
+            ]
+
+            if not gateways:
+                await notifier.notify_user(
+                    user, i18n_key="ntf-subscription.gateways-unavailable"
+                )
+                return
+
             if len(gateways) == 1:
                 logger.info(f"{user.log} Auto-selected payment method '{gateways[0].type}'")
                 dialog_manager.dialog_data["selected_payment_method"] = gateways[0].type
@@ -366,6 +387,20 @@ async def on_duration_select(
         currency=currency,
     )
     dialog_manager.dialog_data["is_free"] = price.is_free
+    gateways = [
+        gateway
+        for gateway in gateways
+        if price.is_free
+        or supports_payment_duration(
+            gateway.type,
+            selected_duration,
+            is_trial=plan.is_trial,
+        )
+    ]
+
+    if not gateways:
+        await notifier.notify_user(user, i18n_key="ntf-subscription.gateways-unavailable")
+        return
 
     if len(gateways) == 1 or price.is_free:
         selected_payment_method = gateways[0].type

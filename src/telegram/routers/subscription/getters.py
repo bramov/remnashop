@@ -10,10 +10,11 @@ from src.application.common import TranslatorRunner
 from src.application.common.dao import PaymentGatewayDao, PlanDao, SettingsDao, SubscriptionDao
 from src.application.dto import PaymentGatewayDto, PlanDto, PriceDetailsDto, TelegramUserDto
 from src.application.services import PricingService
+from src.application.services.autopayment import supports_payment_duration
 from src.application.use_cases.plan.queries.match import MatchPlan, MatchPlanDto
 from src.application.use_cases.user.queries.plans import GetAvailablePlans
 from src.core.config import AppConfig
-from src.core.enums import PurchaseType
+from src.core.enums import PaymentGatewayType, PurchaseType
 from src.core.utils.i18n_helpers import (
     i18n_format_days,
     i18n_format_device_limit,
@@ -194,6 +195,12 @@ async def payment_method_getter(
         price = pricing_service.calculate(
             user, raw_price, gateway.currency, apply_discount=not plan.is_trial
         )
+        if not price.is_free and not supports_payment_duration(
+            gateway.type,
+            duration.days,
+            is_trial=plan.is_trial,
+        ):
+            continue
         payment_methods.append(
             {
                 "gateway_type": gateway.type,
@@ -265,6 +272,16 @@ async def confirm_getter(
 
     key, kw = i18n_format_days(duration.days)
     gateways = await payment_gateway_dao.get_active()
+    gateways = [
+        gateway
+        for gateway in gateways
+        if pricing.is_free
+        or supports_payment_duration(
+            gateway.type,
+            duration.days,
+            is_trial=plan.is_trial,
+        )
+    ]
 
     plan_is_modified = 1 if dialog_manager.dialog_data.get("plan_is_modified", False) else 0
 
@@ -288,6 +305,11 @@ async def confirm_getter(
         "only_single_duration": only_single_duration,
         "only_single_plan": only_single_plan,
         "is_free": is_free,
+        "is_autopayment": (
+            selected_payment_method == PaymentGatewayType.PLATEGA
+            and not plan.is_trial
+            and not pricing.is_free
+        ),
         "plan_is_modified": plan_is_modified,
     }
 

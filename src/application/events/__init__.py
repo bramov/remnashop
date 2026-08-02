@@ -23,6 +23,7 @@ from .system import (
     WebhookErrorEvent,
 )
 from .user import (
+    AutopaymentFailedEvent,
     ReferralAttachedEvent,
     ReferralRewardFailedEvent,
     ReferralRewardReceivedEvent,
@@ -66,6 +67,7 @@ __all__ = [
     "ReferralRewardReceivedEvent",
     #
     "TrialActivatedEvent",
+    "AutopaymentFailedEvent",
     "UserNotConnectedEvent",
     "SubscriptionExpiredEvent",
     "SubscriptionExpiresEvent",

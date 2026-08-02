@@ -452,6 +452,7 @@ notification-type = { $notification_type ->
     [EXPIRED] Подписка истекла
     [EXPIRED_1_DAY_AGO] Подписка истекла (1 день)
     [LIMITED] Трафик исчерпан
+    [AUTOPAYMENT_FAILED] Ошибка автоплатежа
     [REFERRAL_ATTACHED] Реферал закреплен
     [REFERRAL_REWARD_RECEIVED] Вознаграждение за реферала
     [REFERRAL_REWARD_FAILED] Ошибка начисления вознаграждения

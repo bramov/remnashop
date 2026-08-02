@@ -1,4 +1,5 @@
 from .ad_link import AdLink
+from .autopayment import PlategaAutopayment
 from .base import BaseSql
 from .broadcast import Broadcast, BroadcastMessage
 from .oauth_provider import UserOAuthProvider
@@ -13,6 +14,7 @@ from .user import User
 
 __all__ = [
     "AdLink",
+    "PlategaAutopayment",
     "BaseSql",
     "Promocode",
     "PromocodeActivation",
