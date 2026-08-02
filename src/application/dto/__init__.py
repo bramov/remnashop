@@ -1,4 +1,5 @@
 from .ad_link import AdLinkDto, AdLinkStatsDto
+from .autopayment import PlategaAutopaymentDto
 from .base import BaseDto, TimestampMixin, TrackableMixin
 from .broadcast import BroadcastDto, BroadcastMessageDto
 from .build import BuildInfoDto
@@ -9,6 +10,7 @@ from .payment_gateway import (
     GatewaySettingsDto,
     PaymentGatewayDto,
     PaymentResultDto,
+    PaymentWebhookResultDto,
 )
 from .plan import PlanDto, PlanDurationDto, PlanPriceDto, PlanSnapshotDto
 from .promocode import PromocodeActivationDto, PromocodeDto
@@ -47,6 +49,7 @@ from .user import TelegramUserDto, TempUserDto, UserDto, UserOAuthProviderDto
 __all__ = [
     "AdLinkDto",
     "AdLinkStatsDto",
+    "PlategaAutopaymentDto",
     "BaseDto",
     "TimestampMixin",
     "TrackableMixin",
@@ -67,6 +70,7 @@ __all__ = [
     "UserStatisticsDto",
     "PaymentGatewayDto",
     "PaymentResultDto",
+    "PaymentWebhookResultDto",
     "PlanDto",
     "PlanDurationDto",
     "PlanPriceDto",

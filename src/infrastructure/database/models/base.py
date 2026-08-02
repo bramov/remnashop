@@ -17,6 +17,8 @@ from src.core.enums import (
     PaymentGatewayType,
     PlanAvailability,
     PlanType,
+    PlategaAutopaymentInterval,
+    PlategaAutopaymentStatus,
     PromocodeAvailability,
     PromocodeRewardType,
     PurchaseType,
@@ -41,6 +43,10 @@ mapper_registry = registry(
         Role: Enum(Role, name="user_role"),
         Currency: Enum(Currency, name="currency"),
         PaymentGatewayType: Enum(PaymentGatewayType, name="payment_gateway_type"),
+        PlategaAutopaymentInterval: Integer,
+        PlategaAutopaymentStatus: Enum(
+            PlategaAutopaymentStatus, name="platega_autopayment_status"
+        ),
         PurchaseType: Enum(PurchaseType, name="purchase_type"),
         TransactionStatus: Enum(TransactionStatus, name="transaction_status"),
         SubscriptionStatus: Enum(SubscriptionStatus, name="subscription_status"),

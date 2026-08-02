@@ -1,4 +1,5 @@
 import hmac
+from datetime import datetime
 from decimal import Decimal
 from typing import Any, Final, Optional, Union, cast
 from uuid import UUID
@@ -9,10 +10,14 @@ from fastapi import Request
 from httpx import AsyncClient, HTTPStatusError
 from loguru import logger
 
-from src.application.dto import PaymentGatewayDto, PaymentResultDto
+from src.application.dto import (
+    PaymentGatewayDto,
+    PaymentResultDto,
+    PaymentWebhookResultDto,
+)
 from src.application.dto.payment_gateway import PlategaGatewaySettingsDto
 from src.core.config import AppConfig
-from src.core.enums import TransactionStatus
+from src.core.enums import Currency, PlategaAutopaymentInterval, TransactionStatus
 
 from .base import BasePaymentGateway
 
@@ -50,8 +55,6 @@ class PlategaGateway(BasePaymentGateway):
                 "Accept": "application/json",
             },
         )
-        self.selected_payment_method: Optional[str] = None
-
     async def handle_create_payment(self, amount: Decimal, details: str) -> PaymentResultDto:
         payload = await self._create_payment_payload(amount, details)
         logger.debug(f"Creating payment payload: {payload}")
@@ -80,25 +83,69 @@ class PlategaGateway(BasePaymentGateway):
             logger.exception(f"An unexpected error occurred while creating payment: {e}")
             raise
 
-    async def handle_webhook(self, request: Request) -> Union[tuple[UUID, TransactionStatus], None]:
-        logger.debug(f"Received {self.__class__.__name__} webhook request")
+    async def handle_create_autopayment(
+        self,
+        amount: Decimal,
+        details: str,
+        interval: PlategaAutopaymentInterval,
+    ) -> PaymentResultDto:
+        payload = await self._create_payment_payload(amount, details)
+        payload["paymentMethod"] = 6
+        payload["paymentDetails"]["interval"] = int(interval)
 
-        raw_body = await request.body()
-        webhook_data = orjson.loads(raw_body)
+        try:
+            response = await self._client.post(self.DEFAULT_SINGLE_METHOD_ENDPOINT, json=payload)
+            response.raise_for_status()
+            return self._get_payment_data(orjson.loads(response.content))
+        except HTTPStatusError as error:
+            logger.error(
+                "HTTP error creating Platega autopayment. "
+                f"Status: '{error.response.status_code}', Body: {error.response.text}"
+            )
+            raise
+
+    async def handle_cancel_autopayment(self, subscription_id: UUID) -> None:
+        response = await self._client.post(f"subscription/{subscription_id}/cancel")
+        response.raise_for_status()
+        logger.info(f"Canceled Platega autopayment '{subscription_id}'")
+
+    async def handle_webhook(
+        self, request: Request
+    ) -> Union[tuple[UUID, TransactionStatus], PaymentWebhookResultDto, None]:
+        logger.debug(f"Received {self.__class__.__name__} webhook request")
 
         if not self._verify_webhook(request):
             raise PermissionError("Webhook verification failed")
 
-        payment_id_str = webhook_data.get("id")
+        raw_body = await request.body()
+        webhook_data = orjson.loads(raw_body)
+
+        payment_id_str = self._get_value(webhook_data, "id", "Id")
         if not payment_id_str:
             raise ValueError("Required field 'id' is missing")
 
-        status = webhook_data.get("status")
-        payment_id = UUID(payment_id_str)
-        self.selected_payment_method = self._normalize_payment_method(
-            webhook_data.get("paymentMethod")
-        )
+        raw_status = self._get_value(webhook_data, "status", "Status")
+        if not raw_status:
+            raise ValueError("Required field 'status' is missing")
 
+        status = str(raw_status).upper()
+        payment_id = UUID(payment_id_str)
+        payment_method = self._normalize_payment_method(
+            self._get_value(webhook_data, "paymentMethod", "PaymentMethod")
+        )
+        subscription_id_raw = self._get_value(
+            webhook_data, "subscriptionId", "SubscriptionId"
+        )
+        subscription_id = UUID(subscription_id_raw) if subscription_id_raw else None
+        next_charge_at = self._parse_datetime(
+            self._get_value(webhook_data, "nextChargeAt", "NextChargeAt")
+        )
+        amount_raw = self._get_value(webhook_data, "amount", "Amount")
+        amount = Decimal(str(amount_raw)) if amount_raw is not None else None
+        currency_raw = self._get_value(webhook_data, "currency", "Currency")
+        currency = Currency.from_code(str(currency_raw)) if currency_raw else None
+
+        transaction_status: Optional[TransactionStatus]
         match status:
             case "CONFIRMED":
                 transaction_status = TransactionStatus.COMPLETED
@@ -106,10 +153,24 @@ class PlategaGateway(BasePaymentGateway):
                 transaction_status = TransactionStatus.CANCELED
             case "CHARGEBACKED":
                 transaction_status = TransactionStatus.REFUNDED
+            case value if value.startswith("SUBSCRIPTION_"):
+                transaction_status = None
             case _:
                 raise ValueError(f"Unsupported status: {status}")
 
-        return payment_id, transaction_status
+        if status.startswith("SUBSCRIPTION_") and subscription_id is None:
+            subscription_id = payment_id
+
+        return PaymentWebhookResultDto(
+            payment_id=payment_id,
+            transaction_status=transaction_status,
+            payment_method=payment_method,
+            autopayment_subscription_id=subscription_id,
+            autopayment_status=status if status.startswith("SUBSCRIPTION_") else None,
+            next_charge_at=next_charge_at,
+            amount=amount,
+            currency=currency,
+        )
 
     async def _create_payment_payload(self, amount: Decimal, details: str) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -144,6 +205,21 @@ class PlategaGateway(BasePaymentGateway):
 
         payment_method = str(value).strip()
         return payment_method or None
+
+    @staticmethod
+    def _get_value(data: dict[str, Any], *keys: str) -> Any:
+        for key in keys:
+            if key in data:
+                return data[key]
+        return None
+
+    @staticmethod
+    def _parse_datetime(value: Any) -> Optional[datetime]:
+        if not value:
+            return None
+        if isinstance(value, datetime):
+            return value
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
 
     def _verify_webhook(self, request: Request) -> bool:
         merchant_id = request.headers.get("X-MerchantId")

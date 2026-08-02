@@ -1,5 +1,7 @@
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
+from typing import Optional
 from uuid import UUID
 
 from loguru import logger
@@ -13,6 +15,7 @@ from src.application.common import (
 )
 from src.application.common.dao import (
     PaymentGatewayDao,
+    PlategaAutopaymentDao,
     ReferralDao,
     SubscriptionDao,
     TransactionDao,
@@ -24,6 +27,7 @@ from src.application.dto import (
     MessagePayloadDto,
     PaymentResultDto,
     PlanSnapshotDto,
+    PlategaAutopaymentDto,
     PriceDetailsDto,
     TransactionDto,
     UserDto,
@@ -58,6 +62,7 @@ from src.application.use_cases.subscription.commands.purchase import (
 from src.core.enums import (
     Currency,
     PaymentGatewayType,
+    PlategaAutopaymentInterval,
     PurchaseType,
     Role,
     SystemNotificationType,
@@ -149,12 +154,14 @@ class CreatePayment(Interactor[CreatePaymentDto, PaymentResultDto]):
         self,
         uow: UnitOfWork,
         payment_gateway_dao: PaymentGatewayDao,
+        platega_autopayment_dao: PlategaAutopaymentDao,
         transaction_dao: TransactionDao,
         get_payment_gateway_instance: GetPaymentGatewayInstance,
         translator_hub: TranslatorHub,
     ) -> None:
         self.uow = uow
         self.payment_gateway_dao = payment_gateway_dao
+        self.platega_autopayment_dao = platega_autopayment_dao
         self.transaction_dao = transaction_dao
         self.get_payment_gateway_instance = get_payment_gateway_instance
         self.translator_hub = translator_hub
@@ -204,6 +211,46 @@ class CreatePayment(Interactor[CreatePaymentDto, PaymentResultDto]):
             )
             return PaymentResultDto(id=transaction.payment_id, url=None)
 
+        if (
+            gateway_instance.data.type == PaymentGatewayType.PLATEGA
+            and not data.plan_snapshot.is_trial
+        ):
+            interval = PlategaAutopaymentInterval.from_duration_days(
+                data.plan_snapshot.duration
+            )
+            async with self.uow:
+                previous = await self.platega_autopayment_dao.get_latest_replaceable(actor.id)
+                payment = await gateway_instance.handle_create_autopayment(
+                    amount=data.pricing.final_amount,
+                    details=details,
+                    interval=interval,
+                )
+                await self.platega_autopayment_dao.create(
+                    PlategaAutopaymentDto(
+                        subscription_id=payment.id,
+                        user_id=actor.id,
+                        interval=interval,
+                        purchase_type=data.purchase_type,
+                        pricing=data.pricing,
+                        currency=gateway_instance.data.currency,
+                        plan_snapshot=data.plan_snapshot,
+                        gateway_display_name=(
+                            gateway_instance.data.settings.display_name
+                            if gateway_instance.data.settings
+                            else None
+                        ),
+                        replaces_subscription_id=(
+                            previous.subscription_id if previous else None
+                        ),
+                    )
+                )
+                await self.uow.commit()
+
+            logger.info(
+                f"Created Platega autopayment '{payment.id}' for user {actor.log}"
+            )
+            return payment
+
         transaction = TransactionDto(
             payment_id=uuid.uuid4(),
             user_id=actor.id,
@@ -221,17 +268,17 @@ class CreatePayment(Interactor[CreatePaymentDto, PaymentResultDto]):
         )
 
         async with self.uow:
-            payment: PaymentResultDto = await gateway_instance.handle_create_payment(
+            payment_result: PaymentResultDto = await gateway_instance.handle_create_payment(
                 amount=data.pricing.final_amount,
                 details=details,
             )
 
-            transaction.payment_id = payment.id
+            transaction.payment_id = payment_result.id
             await self.transaction_dao.create(transaction)
             await self.uow.commit()
 
-        logger.info(f"Created transaction '{payment.id}' for user {actor.log}")
-        return payment
+        logger.info(f"Created transaction '{payment_result.id}' for user {actor.log}")
+        return payment_result
 
 
 class CreateTestPayment(Interactor[PaymentGatewayType, PaymentResultDto]):
@@ -292,6 +339,7 @@ class ProcessPaymentDto:
     payment_id: UUID
     new_transaction_status: TransactionStatus
     gateway_type: PaymentGatewayType
+    subscription_expire_at: Optional[datetime] = None
 
 
 class ProcessPayment(Interactor[ProcessPaymentDto, None]):
@@ -417,10 +465,15 @@ class ProcessPayment(Interactor[ProcessPaymentDto, None]):
                 return
 
         # UoW closed cleanly; purchase_subscription will open its own UoW
-        await self._handle_success(user, transaction)
+        await self._handle_success(user, transaction, data.subscription_expire_at)
         logger.info(f"Payment succeeded '{payment_id}' for user {user.log}")
 
-    async def _handle_success(self, user: UserDto, transaction: TransactionDto) -> None:
+    async def _handle_success(
+        self,
+        user: UserDto,
+        transaction: TransactionDto,
+        subscription_expire_at: Optional[datetime] = None,
+    ) -> None:
         if transaction.is_test:
             await self.notifier.notify_user(user, i18n_key="ntf-gateway.test-payment-confirmed")
             return
@@ -466,7 +519,12 @@ class ProcessPayment(Interactor[ProcessPaymentDto, None]):
 
         try:
             await self.purchase_subscription.system(
-                PurchaseSubscriptionDto(user, transaction, subscription)
+                PurchaseSubscriptionDto(
+                    user,
+                    transaction,
+                    subscription,
+                    expire_at=subscription_expire_at,
+                )
             )
         except Exception as e:
             logger.exception(

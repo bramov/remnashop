@@ -82,6 +82,7 @@ class PaymentInitResponse(BaseModel):
     is_free: bool
     final_amount: str
     currency: str
+    is_autopayment: bool = False
 
 
 class GatewayOfferResponse(BaseModel):
@@ -98,6 +99,7 @@ class DurationGatewayPriceResponse(BaseModel):
     discount_percent: int
     final_amount: str
     is_free: bool
+    is_autopayment: bool = False
 
 
 class DurationOfferResponse(BaseModel):

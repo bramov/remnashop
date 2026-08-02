@@ -6,6 +6,7 @@ from src.application.common.dao import (
     BroadcastDao,
     PaymentGatewayDao,
     PlanDao,
+    PlategaAutopaymentDao,
     PromocodeDao,
     RecentActivityDao,
     ReferralDao,
@@ -22,6 +23,7 @@ from src.infrastructure.database.dao import (
     BroadcastDaoImpl,
     PaymentGatewayDaoImpl,
     PlanDaoImpl,
+    PlategaAutopaymentDaoImpl,
     PromocodeDaoImpl,
     ReferralDaoImpl,
     SettingsDaoImpl,
@@ -41,6 +43,9 @@ class DaoProvider(Provider):
 
     ad_link = provide(source=AdLinkDaoImpl, provides=AdLinkDao)
     broadcast = provide(source=BroadcastDaoImpl, provides=BroadcastDao)
+    platega_autopayment = provide(
+        source=PlategaAutopaymentDaoImpl, provides=PlategaAutopaymentDao
+    )
     payment_gateway = provide(source=PaymentGatewayDaoImpl, provides=PaymentGatewayDao)
     plan = provide(source=PlanDaoImpl, provides=PlanDao)
     promocode = provide(source=PromocodeDaoImpl, provides=PromocodeDao)

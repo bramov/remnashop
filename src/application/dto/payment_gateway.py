@@ -1,10 +1,12 @@
 from dataclasses import dataclass, fields
+from datetime import datetime
+from decimal import Decimal
 from typing import Any, Literal, Optional, Union
 from uuid import UUID
 
 from pydantic import SecretStr
 
-from src.core.enums import Currency, PaymentGatewayType
+from src.core.enums import Currency, PaymentGatewayType, TransactionStatus
 
 from .base import BaseDto, TrackableMixin
 
@@ -13,6 +15,18 @@ from .base import BaseDto, TrackableMixin
 class PaymentResultDto:
     id: UUID
     url: Optional[str] = None
+
+
+@dataclass(kw_only=True)
+class PaymentWebhookResultDto:
+    payment_id: UUID
+    transaction_status: Optional[TransactionStatus]
+    payment_method: Optional[str] = None
+    autopayment_subscription_id: Optional[UUID] = None
+    autopayment_status: Optional[str] = None
+    next_charge_at: Optional[datetime] = None
+    amount: Optional[Decimal] = None
+    currency: Optional[Currency] = None
 
 
 @dataclass(kw_only=True)

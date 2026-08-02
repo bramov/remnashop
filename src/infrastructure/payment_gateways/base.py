@@ -11,10 +11,10 @@ from httpx import AsyncClient, Timeout
 from loguru import logger
 from starlette.datastructures import Headers
 
-from src.application.dto import PaymentGatewayDto, PaymentResultDto
+from src.application.dto import PaymentGatewayDto, PaymentResultDto, PaymentWebhookResultDto
 from src.core.config import AppConfig
 from src.core.constants import T_ME
-from src.core.enums import TransactionStatus
+from src.core.enums import PlategaAutopaymentInterval, TransactionStatus
 
 
 class PaymentGatewayFactory(Protocol):
@@ -44,7 +44,18 @@ class BasePaymentGateway(ABC):
     async def handle_webhook(
         self,
         request: Request,
-    ) -> Union[tuple[UUID, TransactionStatus], None]: ...
+    ) -> Union[tuple[UUID, TransactionStatus], PaymentWebhookResultDto, None]: ...
+
+    async def handle_create_autopayment(
+        self,
+        amount: Decimal,
+        details: str,
+        interval: PlategaAutopaymentInterval,
+    ) -> PaymentResultDto:
+        raise NotImplementedError(f"{self.__class__.__name__} does not support autopayments")
+
+    async def handle_cancel_autopayment(self, subscription_id: UUID) -> None:
+        raise NotImplementedError(f"{self.__class__.__name__} does not support autopayments")
 
     async def build_webhook_response(self, request: Request) -> Response:
         return Response(status_code=200)

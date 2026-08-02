@@ -1,6 +1,7 @@
 from .activity import RecentActivityDao
 from .ad_link import AdLinkDao
 from .auth import AuthSessionDao
+from .autopayment import PlategaAutopaymentDao
 from .broadcast import BroadcastDao
 from .oauth_provider import UserOAuthProviderDao
 from .payment_gateway import PaymentGatewayDao
@@ -17,6 +18,7 @@ from .webhook import WebhookDao
 __all__ = [
     "RecentActivityDao",
     "AdLinkDao",
+    "PlategaAutopaymentDao",
     "AuthSessionDao",
     "BroadcastDao",
     "UserOAuthProviderDao",

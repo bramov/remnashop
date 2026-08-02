@@ -220,6 +220,11 @@ event-blacklist =
 
 
 event-subscription =
+    .autopayment-failed =
+    <b>❌ Автоплатёж не прошёл.</b>
+
+    Не удалось списать { $amount } { $currency }. Нажмите кнопку ниже, чтобы вручную продлить подписку и заново подключить автоплатёж. Предыдущая привязка будет отменена после успешной оплаты.
+
     .trial =
     #SubscriptionTrialEvent
 

@@ -52,6 +52,7 @@ from src.application.events.system import (
     UserRegisteredEvent,
 )
 from src.application.events.user import (
+    AutopaymentFailedEvent,
     SubscriptionExpiredAgoEvent,
     SubscriptionExpiredEvent,
     SubscriptionExpiresEvent,
@@ -126,6 +127,7 @@ class NotificationService(Notifier):
                 SubscriptionExpiredEvent,
                 SubscriptionExpiredAgoEvent,
                 SubscriptionExpiresEvent,
+                AutopaymentFailedEvent,
             ),
         ):
             return get_buy_keyboard() if event.is_trial else get_renew_keyboard()

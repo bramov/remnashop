@@ -1,4 +1,5 @@
 from .ad_link import AdLinkDaoImpl
+from .autopayment import PlategaAutopaymentDaoImpl
 from .broadcast import BroadcastDaoImpl
 from .oauth_provider import UserOAuthProviderDaoImpl
 from .payment_gateway import PaymentGatewayDaoImpl
@@ -14,6 +15,7 @@ from .webhook import WebhookDaoImpl
 
 __all__ = [
     "AdLinkDaoImpl",
+    "PlategaAutopaymentDaoImpl",
     "BroadcastDaoImpl",
     "UserOAuthProviderDaoImpl",
     "PaymentGatewayDaoImpl",
