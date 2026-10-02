@@ -9,7 +9,7 @@ from fastapi import Request
 from httpx import AsyncClient, HTTPStatusError
 from loguru import logger
 
-from src.application.dto import PaymentGatewayDto, PaymentResultDto
+from src.application.dto import PaymentGatewayDto, PaymentResultDto, UserDto
 from src.application.dto.payment_gateway import PlategaGatewaySettingsDto
 from src.core.config import AppConfig
 from src.core.enums import TransactionStatus
@@ -53,8 +53,25 @@ class PlategaGateway(BasePaymentGateway):
         self.selected_payment_method: Optional[str] = None
 
     async def handle_create_payment(self, amount: Decimal, details: str) -> PaymentResultDto:
-        payload = await self._create_payment_payload(amount, details)
-        logger.debug(f"Creating payment payload: {payload}")
+        raise ValueError("Platega payment requires user context")
+
+    async def handle_create_payment_for_user(
+        self,
+        amount: Decimal,
+        details: str,
+        user: UserDto,
+    ) -> PaymentResultDto:
+        user_email = self._build_user_email(user.username, user.telegram_id)
+        return await self._create_payment(amount, details, user_email=user_email)
+
+    async def _create_payment(
+        self,
+        amount: Decimal,
+        details: str,
+        user_email: str,
+    ) -> PaymentResultDto:
+        payload = await self._create_payment_payload(amount, details, user_email)
+        logger.debug(f"Creating payment payload: {self._redact_payment_payload(payload)}")
         endpoint = (
             self.DEFAULT_SINGLE_METHOD_ENDPOINT
             if self.settings.payment_method is not None
@@ -111,7 +128,12 @@ class PlategaGateway(BasePaymentGateway):
 
         return payment_id, transaction_status
 
-    async def _create_payment_payload(self, amount: Decimal, details: str) -> dict[str, Any]:
+    async def _create_payment_payload(
+        self,
+        amount: Decimal,
+        details: str,
+        user_email: str,
+    ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "paymentDetails": {
                 "amount": float(amount),
@@ -121,10 +143,26 @@ class PlategaGateway(BasePaymentGateway):
             "return": await self._get_bot_redirect_url(),
             "failedUrl": await self._get_bot_redirect_url(),
         }
+        payload["metadata"] = {"user_email": user_email}
         if self.settings.payment_method is not None:
             payload["paymentMethod"] = self.settings.payment_method
 
         return payload
+
+    @staticmethod
+    def _build_user_email(username: Optional[str], telegram_id: Optional[int]) -> str:
+        normalized_username = (username or "").strip().removeprefix("@").strip()
+        if normalized_username:
+            return f"{normalized_username}@t.me"
+        if telegram_id is not None:
+            return f"{telegram_id}@t.me"
+        raise ValueError("Platega payment requires a Telegram username or Telegram ID")
+
+    @staticmethod
+    def _redact_payment_payload(payload: dict[str, Any]) -> dict[str, Any]:
+        if "metadata" not in payload:
+            return payload
+        return {**payload, "metadata": {"user_email": "***"}}
 
     def _get_payment_data(self, data: dict[str, Any]) -> PaymentResultDto:
         transaction_id_str = data.get("transactionId")

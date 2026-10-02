@@ -11,7 +11,7 @@ from httpx import AsyncClient, Timeout
 from loguru import logger
 from starlette.datastructures import Headers
 
-from src.application.dto import PaymentGatewayDto, PaymentResultDto
+from src.application.dto import PaymentGatewayDto, PaymentResultDto, UserDto
 from src.core.config import AppConfig
 from src.core.constants import T_ME
 from src.core.enums import TransactionStatus
@@ -39,6 +39,14 @@ class BasePaymentGateway(ABC):
 
     @abstractmethod
     async def handle_create_payment(self, amount: Decimal, details: str) -> PaymentResultDto: ...
+
+    async def handle_create_payment_for_user(
+        self,
+        amount: Decimal,
+        details: str,
+        user: UserDto,
+    ) -> PaymentResultDto:
+        return await self.handle_create_payment(amount, details)
 
     @abstractmethod
     async def handle_webhook(
