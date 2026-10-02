@@ -1,0 +1,58 @@
+name: Validate fork
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - "codex/**"
+  workflow_dispatch:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked --dev
+
+      - name: Ruff format
+        run: |
+          uv run ruff format --check \
+            src/application/use_cases/gateways/commands/payment.py \
+            src/infrastructure/payment_gateways/base.py \
+            src/infrastructure/payment_gateways/platega.py \
+            tests/infrastructure/payment_gateways/test_platega.py
+
+      - name: Ruff lint
+        run: |
+          uv run ruff check \
+            src/application/use_cases/gateways/commands/payment.py \
+            src/infrastructure/payment_gateways/base.py \
+            src/infrastructure/payment_gateways/platega.py \
+            tests/infrastructure/payment_gateways/test_platega.py
+
+      - name: Mypy
+        run: uv run mypy src
+
+      - name: Tests
+        env:
+          PYTHONPATH: .
+        run: uv run pytest -q tests/infrastructure/payment_gateways/test_platega.py
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build production image
+        run: docker build --tag remnashop:validation .
