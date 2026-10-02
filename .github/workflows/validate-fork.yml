@@ -25,10 +25,20 @@ jobs:
         run: uv sync --locked --dev
 
       - name: Ruff format
-        run: uv run ruff format --check src tests/infrastructure/payment_gateways/test_platega.py
+        run: |
+          uv run ruff format --check \
+            src/application/use_cases/gateways/commands/payment.py \
+            src/infrastructure/payment_gateways/base.py \
+            src/infrastructure/payment_gateways/platega.py \
+            tests/infrastructure/payment_gateways/test_platega.py
 
       - name: Ruff lint
-        run: uv run ruff check src tests/infrastructure/payment_gateways/test_platega.py
+        run: |
+          uv run ruff check \
+            src/application/use_cases/gateways/commands/payment.py \
+            src/infrastructure/payment_gateways/base.py \
+            src/infrastructure/payment_gateways/platega.py \
+            tests/infrastructure/payment_gateways/test_platega.py
 
       - name: Mypy
         run: uv run mypy src
