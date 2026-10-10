@@ -194,6 +194,8 @@ async def get_renewal_offers(
                 RenewalGatewayPriceResponse(
                     gateway_type=gateway.type,
                     gateway_name=settings.display_name or gateway.type.value,
+                    original_amount=str(pricing.original_amount),
+                    discount_percent=pricing.discount_percent,
                     amount=str(pricing.final_amount),
                     currency=gateway.currency.symbol,
                 )

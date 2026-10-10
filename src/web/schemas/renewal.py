@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Optional
+from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -14,9 +15,12 @@ class RenewalResolveRequest(BaseModel):
     @field_validator("subscription_url")
     @classmethod
     def validate_subscription_url(cls, value: str) -> str:
-        if not value.startswith("https://") or any(char.isspace() for char in value):
+        if any(char.isspace() for char in value):
             raise ValueError("A valid HTTPS subscription URL is required")
-        return value
+        parsed = urlsplit(value)
+        if parsed.scheme != "https" or not parsed.netloc or not parsed.path:
+            raise ValueError("A valid HTTPS subscription URL is required")
+        return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", ""))
 
 
 class RenewalSessionResponse(BaseModel):
@@ -30,6 +34,8 @@ class RenewalSessionResponse(BaseModel):
 class RenewalGatewayPriceResponse(BaseModel):
     gateway_type: PaymentGatewayType
     gateway_name: str
+    original_amount: str
+    discount_percent: int
     amount: str
     currency: str
 

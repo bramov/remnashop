@@ -9,6 +9,17 @@ let token = sessionStorage.getItem("renewalToken");
 let selected = null;
 let pollTimer = null;
 
+function normalizeSubscriptionUrl(value) {
+  try {
+    const url = new URL(value.trim());
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch (_) {
+    return value.trim();
+  }
+}
+
 function showError(message) {
   errorBox.textContent = message;
   errorBox.classList.remove("hidden");
@@ -53,15 +64,25 @@ async function loadOffers(session) {
     const details = document.createElement("span");
     const duration = document.createElement("span");
     const gateway = document.createElement("span");
+    const priceWrap = document.createElement("span");
     const amount = document.createElement("span");
+    const originalAmount = document.createElement("span");
+    const discount = document.createElement("span");
     duration.className = "offer-duration";
     gateway.className = "offer-gateway";
+    priceWrap.className = "offer-price-wrap";
     amount.className = "offer-price";
+    originalAmount.className = "offer-original-price";
+    discount.className = "offer-discount";
     duration.textContent = formatDays(offer.duration_days);
     gateway.textContent = price.gateway_name;
     amount.textContent = `${price.amount} ${price.currency}`;
+    originalAmount.textContent = `${price.original_amount} ${price.currency}`;
+    discount.textContent = `−${price.discount_percent}%`;
     details.append(duration, gateway);
-    button.append(details, amount);
+    if (price.discount_percent > 0) priceWrap.append(discount, originalAmount);
+    priceWrap.append(amount);
+    button.append(details, priceWrap);
     button.addEventListener("click", () => {
       document.querySelectorAll(".offer").forEach((item) => item.classList.remove("selected"));
       button.classList.add("selected");
@@ -81,9 +102,11 @@ $("#lookup-form").addEventListener("submit", async (event) => {
   const submit = event.currentTarget.querySelector("button[type=submit]");
   submit.disabled = true; submit.textContent = "Ищем…";
   try {
+    const normalizedUrl = normalizeSubscriptionUrl($("#subscription-url").value);
+    $("#subscription-url").value = normalizedUrl;
     const session = await request("/resolve", {
       method: "POST",
-      body: JSON.stringify({ subscription_url: $("#subscription-url").value.trim() }),
+      body: JSON.stringify({ subscription_url: normalizedUrl }),
     });
     token = session.token;
     sessionStorage.setItem("renewalToken", token);
@@ -109,7 +132,7 @@ payButton.addEventListener("click", async () => {
     if (paymentWindow) paymentWindow.close();
     showError(error.message); payButton.disabled = false;
   }
-  finally { payButton.textContent = "Перейти к оплате"; }
+  finally { payButton.textContent = "Продлить подписку"; }
 });
 
 function showPayment(payment, paymentWindow) {
@@ -170,6 +193,44 @@ const help = $("#help-dialog");
 $("#open-help").addEventListener("click", () => help.showModal());
 $("#close-help").addEventListener("click", () => help.close());
 help.addEventListener("click", (event) => { if (event.target === help) help.close(); });
+
+const guideByClient = {
+  happ: {
+    name: "Happ",
+    icon: "./assets/happ-icon.png",
+    shot: "./assets/happ-menu.png",
+    secondStep: "Выберите «Редактировать».",
+    hasCopyStep: true,
+  },
+  incy: {
+    name: "Incy",
+    icon: "./assets/incy-icon.png",
+    shot: "./assets/incy-menu.png",
+    secondStep: "Выберите «Копировать URL».",
+    hasCopyStep: false,
+  },
+};
+
+function showClientGuide(client) {
+  const guide = guideByClient[client];
+  if (!guide) return;
+  $("#guide-client-name").textContent = guide.name;
+  $("#guide-icon").src = guide.icon;
+  $("#guide-shot").src = guide.shot;
+  $("#guide-second-step").textContent = guide.secondStep;
+  $("#guide-happ-copy").classList.toggle("hidden", !guide.hasCopyStep);
+  $("#client-picker").classList.add("hidden");
+  $("#client-guide").classList.remove("hidden");
+  help.scrollTop = 0;
+}
+
+document.querySelectorAll("[data-client]").forEach((button) => {
+  button.addEventListener("click", () => showClientGuide(button.dataset.client));
+});
+$("#guide-back").addEventListener("click", () => {
+  $("#client-guide").classList.add("hidden");
+  $("#client-picker").classList.remove("hidden");
+});
 
 if (token) {
   try {
