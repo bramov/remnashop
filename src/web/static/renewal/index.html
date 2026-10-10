@@ -61,7 +61,7 @@
         <div class="divider"></div>
         <h3>Выберите срок</h3>
         <div class="offers" id="offers"></div>
-        <button class="primary" id="pay-button" type="button" disabled>Перейти к оплате</button>
+        <button class="primary" id="pay-button" type="button" disabled>Продлить подписку</button>
         <button class="text-button" id="change-link" type="button">Ввести другую ссылку</button>
       </section>
 
@@ -73,7 +73,7 @@
           Платёж открыт в новой вкладке. Эта страница обновится автоматически.
         </p>
         <a class="primary link-button" id="payment-link" target="_blank" rel="noopener">
-          Открыть страницу оплаты
+          Продолжить на странице банка
         </a>
         <button class="text-button" id="back-to-offers" type="button">Вернуться к вариантам</button>
       </section>
@@ -82,20 +82,52 @@
       <footer>Не передавайте ссылку подписки другим людям.</footer>
     </main>
 
-    <dialog id="help-dialog">
+    <dialog id="help-dialog" aria-labelledby="help-title">
       <div class="dialog-head">
-        <h2>Как найти ссылку</h2>
+        <div>
+          <p class="eyebrow">Подсказка</p>
+          <h2 id="help-title">Где найти ссылку подписки?</h2>
+        </div>
         <button class="close" id="close-help" type="button" aria-label="Закрыть">×</button>
       </div>
-      <ol>
-        <li>Откройте Incy.</li>
-        <li>Нажмите на картинку с тремя точками.</li>
-        <li>Выберите «Копировать url».</li>
-      </ol>
-      <p class="dialog-note">
-        Обычно ссылка начинается с
-        <a href="https://sub.solvt.ai/" target="_blank" rel="noopener">https://sub.solvt.ai/</a>
-      </p>
+      <section class="client-picker" id="client-picker">
+        <p>Выберите ваш VPN-клиент</p>
+        <div class="client-options">
+          <button class="client-button" type="button" data-client="happ">
+            <img src="./assets/happ-icon.png" alt="" />
+            <span>Happ</span>
+            <span class="client-arrow" aria-hidden="true">→</span>
+          </button>
+          <button class="client-button" type="button" data-client="incy">
+            <img src="./assets/incy-icon.png" alt="" />
+            <span>Incy</span>
+            <span class="client-arrow" aria-hidden="true">→</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="client-guide hidden" id="client-guide" aria-live="polite">
+        <button class="guide-back" id="guide-back" type="button">← Выбрать другой клиент</button>
+        <div class="guide-title">
+          <img id="guide-icon" alt="" />
+          <div>
+            <span>Инструкция для</span>
+            <h3 id="guide-client-name">—</h3>
+          </div>
+        </div>
+        <ol class="guide-steps">
+          <li data-step="1">
+            <p>Нажмите на иконку с тремя точками.</p>
+            <img class="guide-shot" id="guide-shot" alt="Где находится меню с тремя точками" />
+          </li>
+          <li id="guide-second-step" data-step="2"></li>
+          <li class="hidden" id="guide-happ-copy" data-step="3">
+            Скопируйте ссылку внизу. Она начинается с
+            <span class="url-example">https://sub.solvt.ai/</span>
+          </li>
+          <li data-step="4">Вернитесь на этот сайт и вставьте её в поле со ссылкой.</li>
+        </ol>
+      </section>
     </dialog>
 
     <script src="./app.js" defer></script>

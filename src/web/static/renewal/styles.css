@@ -110,7 +110,10 @@ h2 { margin: 0; font-size: 27px; letter-spacing: -.03em; }
 .offer.selected { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .offer-duration { font-weight: 700; }
 .offer-gateway { margin-top: 4px; color: var(--muted); font-size: 12px; }
+.offer-price-wrap { display: grid; justify-items: end; gap: 3px; }
 .offer-price { color: var(--accent); font-weight: 750; }
+.offer-original-price { color: var(--muted); font-size: 11px; text-decoration: line-through; }
+.offer-discount { padding: 3px 6px; border-radius: 999px; color: var(--accent); background: rgba(140,255,191,.1); font-size: 10px; font-weight: 800; }
 
 .payment-state { text-align: center; }
 .payment-state p { color: var(--muted); line-height: 1.55; }
@@ -123,19 +126,50 @@ h2 { margin: 0; font-size: 27px; letter-spacing: -.03em; }
 footer { margin-top: 24px; color: #687287; font-size: 12px; text-align: center; }
 .hidden { display: none !important; }
 
-dialog { width: min(100% - 32px, 500px); padding: 26px; border: 1px solid var(--card-border); border-radius: 22px; color: var(--text); background: #151b29; box-shadow: var(--shadow); }
+dialog { width: min(100% - 32px, 560px); max-height: min(88vh, 820px); padding: 26px; border: 1px solid var(--card-border); border-radius: 22px; color: var(--text); background: #151b29; box-shadow: var(--shadow); overflow-x: hidden; }
 dialog::backdrop { background: rgba(2,5,10,.78); backdrop-filter: blur(5px); }
-.dialog-head { display: flex; align-items: center; justify-content: space-between; }
+.dialog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.dialog-head .eyebrow { margin-bottom: 7px; }
 .close { border: 0; color: var(--muted); background: none; font-size: 30px; cursor: pointer; }
-dialog ol { margin: 22px 0; padding-left: 23px; color: var(--muted); line-height: 1.7; }
-.dialog-note { margin: 0; color: var(--muted); font-size: 13px; }
-code, .dialog-note a { color: var(--accent); }
+.client-picker { margin-top: 26px; }
+.client-picker > p { margin: 0 0 12px; color: var(--muted); font-size: 14px; }
+.client-options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.client-button {
+  display: grid; grid-template-columns: 46px 1fr auto; align-items: center; gap: 12px; min-width: 0;
+  padding: 12px; border: 1px solid var(--card-border); border-radius: 16px; color: var(--text);
+  background: rgba(5,9,16,.46); font-weight: 750; text-align: left; cursor: pointer;
+  transition: border-color .15s, transform .15s, background .15s;
+}
+.client-button:hover { border-color: rgba(140,255,191,.55); background: rgba(140,255,191,.05); transform: translateY(-1px); }
+.client-button img { width: 46px; height: 46px; border-radius: 12px; object-fit: cover; }
+.client-arrow { color: var(--accent); font-size: 20px; }
+.client-guide { margin-top: 20px; }
+.guide-back { padding: 0; border: 0; color: var(--muted); background: none; cursor: pointer; }
+.guide-back:hover { color: var(--text); }
+.guide-title { display: flex; align-items: center; gap: 12px; margin: 20px 0; }
+.guide-title img { width: 48px; height: 48px; border-radius: 13px; object-fit: cover; }
+.guide-title span { color: var(--muted); font-size: 12px; }
+.guide-title h3 { margin: 2px 0 0; font-size: 20px; }
+.guide-steps { margin: 0; padding: 0; list-style: none; }
+.guide-steps li {
+  position: relative; margin: 0 0 14px; padding: 16px 16px 16px 52px; border: 1px solid var(--card-border);
+  border-radius: 16px; color: var(--muted); background: rgba(5,9,16,.32); line-height: 1.55;
+}
+.guide-steps li::before {
+  content: attr(data-step); position: absolute; top: 14px; left: 14px; display: grid; place-items: center;
+  width: 26px; height: 26px; border-radius: 50%; color: #07120d; background: var(--accent); font-size: 12px; font-weight: 850;
+}
+.guide-steps p { margin: 0; }
+.guide-shot { display: block; width: 100%; aspect-ratio: 4 / 5; margin-top: 14px; border-radius: 12px; object-fit: cover; }
+.url-example { display: block; margin-top: 8px; color: var(--accent); font-size: 13px; overflow-wrap: anywhere; }
 
 @media (max-width: 560px) {
   .shell { width: min(100% - 22px, 680px); padding-top: 22px; }
   .hero { padding: 52px 4px 26px; }
   .card { padding: 20px; border-radius: 20px; }
   .subscription-head { align-items: center; }
+  dialog { width: calc(100% - 22px); padding: 20px; border-radius: 20px; }
+  .client-options { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {
