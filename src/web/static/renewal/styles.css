@@ -126,7 +126,7 @@ h2 { margin: 0; font-size: 27px; letter-spacing: -.03em; }
 footer { margin-top: 24px; color: #687287; font-size: 12px; text-align: center; }
 .hidden { display: none !important; }
 
-dialog { width: min(100% - 32px, 560px); max-height: min(88vh, 820px); padding: 26px; border: 1px solid var(--card-border); border-radius: 22px; color: var(--text); background: #151b29; box-shadow: var(--shadow); overflow-x: hidden; }
+dialog { width: min(100% - 32px, 680px); max-height: min(88vh, 820px); padding: 26px; border: 1px solid var(--card-border); border-radius: 22px; color: var(--text); background: #151b29; box-shadow: var(--shadow); overflow-x: hidden; }
 dialog::backdrop { background: rgba(2,5,10,.78); backdrop-filter: blur(5px); }
 .dialog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .dialog-head .eyebrow { margin-bottom: 7px; }
@@ -160,8 +160,8 @@ dialog::backdrop { background: rgba(2,5,10,.78); backdrop-filter: blur(5px); }
   width: 26px; height: 26px; border-radius: 50%; color: #07120d; background: var(--accent); font-size: 12px; font-weight: 850;
 }
 .guide-steps p { margin: 0; }
-.guide-shot { display: block; width: 100%; aspect-ratio: 4 / 5; margin-top: 14px; border-radius: 12px; object-fit: cover; }
-.url-example { display: block; margin-top: 8px; color: var(--accent); font-size: 13px; overflow-wrap: anywhere; }
+.guide-shot { display: block; width: 100%; max-height: 480px; aspect-ratio: 4 / 5; margin-top: 14px; border-radius: 12px; object-fit: cover; object-position: bottom; }
+.url-example { color: var(--accent); white-space: nowrap; }
 
 @media (max-width: 560px) {
   .shell { width: min(100% - 22px, 680px); padding-top: 22px; }
