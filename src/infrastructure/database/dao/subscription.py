@@ -77,8 +77,13 @@ class SubscriptionDaoImpl(SubscriptionDao, BaseDaoImpl):
         logger.debug(f"Subscription with remna ID '{user_remna_id}' not found")
         return None
 
-    async def get_by_url(self, url: str) -> Optional[SubscriptionDto]:
-        stmt = select(Subscription).where(Subscription.url == url).limit(1)
+    async def get_current_by_url(self, url: str) -> Optional[SubscriptionDto]:
+        stmt = (
+            select(Subscription)
+            .join(User, User.current_subscription_id == Subscription.id)
+            .where(Subscription.url == url)
+            .limit(1)
+        )
         db_subscription = await self.session.scalar(stmt)
 
         if db_subscription:
@@ -86,7 +91,7 @@ class SubscriptionDaoImpl(SubscriptionDao, BaseDaoImpl):
             logger.debug("Subscription found by URL")
             return self._convert_to_dto(db_subscription)
 
-        logger.debug("Subscription URL not found")
+        logger.debug("Current subscription URL not found")
         return None
 
     async def get_all_by_user(self, user_id: int) -> list[SubscriptionDto]:

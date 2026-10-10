@@ -135,7 +135,7 @@ async def resolve_subscription(
     user_dao: FromDishka[UserDao],
 ) -> RenewalSessionResponse:
     await _enforce_resolve_rate_limit(redis, request)
-    subscription = await subscription_dao.get_by_url(body.subscription_url)
+    subscription = await subscription_dao.get_current_by_url(body.subscription_url)
     if not subscription:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subscription not found")
 
