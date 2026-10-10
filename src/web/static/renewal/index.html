@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#090d16" />
+    <title>Продление подписки — Solvt VPN</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+    <main class="shell">
+      <header class="brand" aria-label="Solvt VPN">
+        <span class="brand-mark" aria-hidden="true">S</span>
+        <span>Solvt <strong>VPN</strong></span>
+      </header>
+
+      <section class="hero">
+        <p class="eyebrow">Быстрое продление</p>
+        <h1>Продлите VPN<br /><span>по ссылке подписки</span></h1>
+        <p class="lead">
+          Вставьте вашу персональную ссылку — мы покажем доступные сроки и перенаправим
+          на безопасную оплату.
+        </p>
+      </section>
+
+      <section class="card" id="lookup-card">
+        <form id="lookup-form" novalidate>
+          <label for="subscription-url">Ссылка подписки</label>
+          <div class="input-wrap">
+            <input
+              id="subscription-url"
+              name="subscription-url"
+              type="url"
+              inputmode="url"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="https://…"
+              required
+            />
+            <span class="input-icon" aria-hidden="true">↗</span>
+          </div>
+          <p class="hint">Ссылка используется только для поиска вашей подписки.</p>
+          <button class="primary" type="submit">Найти подписку</button>
+        </form>
+        <button class="text-button" id="open-help" type="button">
+          Где найти ссылку подписки?
+        </button>
+      </section>
+
+      <section class="card hidden" id="offers-card" aria-live="polite">
+        <div class="subscription-head">
+          <div>
+            <p class="eyebrow">Ваша подписка</p>
+            <h2 id="plan-name">—</h2>
+          </div>
+          <span class="status-pill" id="subscription-status">—</span>
+        </div>
+        <p class="expiry" id="expiry-text"></p>
+        <div class="divider"></div>
+        <h3>Выберите срок</h3>
+        <div class="offers" id="offers"></div>
+        <button class="primary" id="pay-button" type="button" disabled>Перейти к оплате</button>
+        <button class="text-button" id="change-link" type="button">Ввести другую ссылку</button>
+      </section>
+
+      <section class="card payment-state hidden" id="payment-card" aria-live="polite">
+        <div class="spinner" id="payment-spinner" aria-hidden="true"></div>
+        <div class="success-mark hidden" id="success-mark" aria-hidden="true">✓</div>
+        <h2 id="payment-title">Ожидаем оплату</h2>
+        <p id="payment-copy">
+          Платёж открыт в новой вкладке. Эта страница обновится автоматически.
+        </p>
+        <a class="primary link-button" id="payment-link" target="_blank" rel="noopener">
+          Открыть страницу оплаты
+        </a>
+        <button class="text-button" id="back-to-offers" type="button">Вернуться к вариантам</button>
+      </section>
+
+      <p class="error hidden" id="error" role="alert"></p>
+      <footer>Не передавайте ссылку подписки другим людям.</footer>
+    </main>
+
+    <dialog id="help-dialog">
+      <div class="dialog-head">
+        <h2>Как найти ссылку</h2>
+        <button class="close" id="close-help" type="button" aria-label="Закрыть">×</button>
+      </div>
+      <ol>
+        <li>Откройте Telegram-бот Solvt VPN.</li>
+        <li>Перейдите в раздел вашей подписки.</li>
+        <li>Нажмите кнопку подключения или копирования ссылки.</li>
+        <li>Вставьте скопированную ссылку в поле на этой странице.</li>
+      </ol>
+      <p class="dialog-note">Обычно ссылка начинается с <code>https://</code>.</p>
+    </dialog>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>

@@ -367,7 +367,11 @@ class ProcessPayment(Interactor[ProcessPaymentDto, None]):
                 updated = await self.transaction_dao.transition_status(
                     payment_id,
                     TransactionStatus.COMPLETED,
-                    (TransactionStatus.PENDING, TransactionStatus.FAILED),
+                    (
+                        TransactionStatus.PENDING,
+                        TransactionStatus.FAILED,
+                        TransactionStatus.CANCELED,
+                    ),
                 )
                 if not updated:
                     logger.warning(

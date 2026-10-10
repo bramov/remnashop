@@ -3,11 +3,13 @@ from fastapi import FastAPI
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from loguru import logger
 from starlette.middleware.cors import CORSMiddleware
 
 from src.__version__ import __version__
 from src.core.config import AppConfig
+from src.core.constants import API_V1
 from src.lifespan import lifespan
 
 from .endpoints import (
@@ -16,6 +18,7 @@ from .endpoints import (
     payments_router,
     public_router,
     remnawave_router,
+    renewal_router,
 )
 
 
@@ -49,6 +52,13 @@ def get_app(config: AppConfig, dispatcher: Dispatcher) -> FastAPI:
     app.include_router(remnawave_router)
     if config.web_enabled:
         app.include_router(public_router)
+    if config.renewal_web_enabled:
+        app.include_router(renewal_router, prefix=API_V1 + "/public")
+        app.mount(
+            "/renew",
+            StaticFiles(directory="src/web/static/renewal", html=True),
+            name="renewal-web",
+        )
 
     if config.swagger_enabled:
 
