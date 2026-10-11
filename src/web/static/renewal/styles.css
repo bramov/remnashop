@@ -32,18 +32,6 @@ body::before {
   background-size: 5px 5px;
 }
 
-.ambient {
-  position: fixed;
-  width: 36rem;
-  height: 36rem;
-  border-radius: 50%;
-  filter: blur(100px);
-  opacity: 0.14;
-  pointer-events: none;
-}
-.ambient-one { background: #2bff9d; top: -20rem; right: -12rem; }
-.ambient-two { background: #3a6cff; bottom: -24rem; left: -18rem; }
-
 .shell {
   position: relative;
   width: min(100% - 32px, 680px);

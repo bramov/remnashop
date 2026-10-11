@@ -7,6 +7,13 @@ from src.application.common import Interactor
 from src.application.dto import PlanDto, PlanSnapshotDto, UserDto
 
 
+def find_plan_by_snapshot_id(
+    snapshot: PlanSnapshotDto,
+    plans: list[PlanDto],
+) -> Optional[PlanDto]:
+    return next((plan for plan in plans if plan.id == snapshot.id), None)
+
+
 @dataclass(frozen=True)
 class MatchPlanDto:
     plan_snapshot: PlanSnapshotDto

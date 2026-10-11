@@ -5,6 +5,9 @@ const offersCard = $("#offers-card");
 const paymentCard = $("#payment-card");
 const errorBox = $("#error");
 const payButton = $("#pay-button");
+const lookupForm = $("#lookup-form");
+const subscriptionInput = $("#subscription-url");
+const lookupButton = lookupForm.querySelector("button[type=submit]");
 let token = sessionStorage.getItem("renewalToken");
 let selected = null;
 let pollTimer = null;
@@ -27,13 +30,19 @@ function showError(message) {
 
 function clearError() { errorBox.classList.add("hidden"); }
 
+function errorMessage(detail, status) {
+  if (typeof detail === "string" && detail.trim()) return detail;
+  if (status === 422) return "Введите корректную HTTPS-ссылку подписки.";
+  return "Не удалось выполнить запрос. Попробуйте ещё раз.";
+}
+
 async function request(path, options = {}) {
   const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
   if (token) headers["X-Renewal-Token"] = token;
   const response = await fetch(`${api}${path}`, { ...options, headers });
   let data = {};
   try { data = await response.json(); } catch (_) { /* empty response */ }
-  if (!response.ok) throw new Error(data.detail || "Не удалось выполнить запрос. Попробуйте ещё раз.");
+  if (!response.ok) throw new Error(errorMessage(data.detail, response.status));
   return data;
 }
 
@@ -52,9 +61,15 @@ function statusLabel(status) {
 
 async function loadOffers(session) {
   const data = await request("/offers");
+  const currentSession = {
+    ...session,
+    plan_name: data.plan_name,
+    subscription_status: data.subscription_status,
+    expire_at: data.expire_at,
+  };
+  sessionStorage.setItem("renewalSession", JSON.stringify(currentSession));
   $("#plan-name").textContent = data.plan_name;
-  $("#subscription-status").textContent = statusLabel(session.subscription_status);
-  $("#expiry-text").textContent = `Действует до ${new Intl.DateTimeFormat("ru-RU", { dateStyle: "long" }).format(new Date(session.expire_at))}`;
+  updateSubscriptionMeta(currentSession);
   const list = $("#offers");
   list.replaceChildren();
   data.offers.forEach((offer) => offer.prices.forEach((price) => {
@@ -97,13 +112,25 @@ async function loadOffers(session) {
   offersCard.classList.remove("hidden");
 }
 
-$("#lookup-form").addEventListener("submit", async (event) => {
+function updateSubscriptionMeta(session) {
+  $("#subscription-status").textContent = statusLabel(session.subscription_status);
+  $("#expiry-text").textContent = `Действует до ${new Intl.DateTimeFormat("ru-RU", { dateStyle: "long" }).format(new Date(session.expire_at))}`;
+}
+
+function syncLookupButton() {
+  lookupButton.disabled = !subscriptionInput.value.trim();
+}
+
+subscriptionInput.addEventListener("input", syncLookupButton);
+syncLookupButton();
+
+lookupForm.addEventListener("submit", async (event) => {
   event.preventDefault(); clearError();
-  const submit = event.currentTarget.querySelector("button[type=submit]");
-  submit.disabled = true; submit.textContent = "Ищем…";
+  if (!subscriptionInput.value.trim()) return;
+  lookupButton.disabled = true; lookupButton.textContent = "Ищем…";
   try {
-    const normalizedUrl = normalizeSubscriptionUrl($("#subscription-url").value);
-    $("#subscription-url").value = normalizedUrl;
+    const normalizedUrl = normalizeSubscriptionUrl(subscriptionInput.value);
+    subscriptionInput.value = normalizedUrl;
     const session = await request("/resolve", {
       method: "POST",
       body: JSON.stringify({ subscription_url: normalizedUrl }),
@@ -113,7 +140,7 @@ $("#lookup-form").addEventListener("submit", async (event) => {
     sessionStorage.setItem("renewalSession", JSON.stringify(session));
     await loadOffers(session);
   } catch (error) { showError(error.message); }
-  finally { submit.disabled = false; submit.textContent = "Найти подписку"; }
+  finally { lookupButton.textContent = "Найти подписку"; syncLookupButton(); }
 });
 
 payButton.addEventListener("click", async () => {
@@ -147,8 +174,16 @@ function showPayment(payment, paymentWindow) {
     if (paymentWindow) paymentWindow.close();
     link.classList.add("hidden");
   }
-  if (payment.status === "COMPLETED") return markCompleted();
+  if (payment.status === "COMPLETED") return refreshCompletedPayment(payment.payment_id);
   pollPayment(payment.payment_id);
+}
+
+async function refreshCompletedPayment(paymentId) {
+  try {
+    markCompleted(await request(`/payments/${paymentId}`));
+  } catch (_) {
+    markCompleted();
+  }
 }
 
 function pollPayment(paymentId) {
@@ -156,18 +191,28 @@ function pollPayment(paymentId) {
   pollTimer = setInterval(async () => {
     try {
       const payment = await request(`/payments/${paymentId}`);
-      if (payment.status === "COMPLETED") markCompleted();
+      if (payment.status === "COMPLETED") markCompleted(payment);
       if (["FAILED", "REFUNDED"].includes(payment.status)) markFailed();
     } catch (_) { /* transient polling errors are retried */ }
   }, 3000);
 }
 
-function markCompleted() {
+function markCompleted(payment = null) {
   clearInterval(pollTimer);
+  if (payment?.expire_at) {
+    const storedSession = JSON.parse(sessionStorage.getItem("renewalSession") || "{}");
+    const currentSession = {
+      ...storedSession,
+      subscription_status: payment.subscription_status,
+      expire_at: payment.expire_at,
+    };
+    sessionStorage.setItem("renewalSession", JSON.stringify(currentSession));
+    updateSubscriptionMeta(currentSession);
+  }
   $("#payment-spinner").classList.add("hidden");
   $("#success-mark").classList.remove("hidden");
   $("#payment-title").textContent = "Подписка продлена";
-  $("#payment-copy").textContent = "Оплата подтверждена. Бот и панель уже получили обновление.";
+  $("#payment-copy").textContent = "Нажмите кнопку обновления в вашем vpn-клиенте, чтобы снова воспользоваться VPN.";
   $("#payment-link").classList.add("hidden");
 }
 

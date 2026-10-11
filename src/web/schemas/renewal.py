@@ -16,10 +16,10 @@ class RenewalResolveRequest(BaseModel):
     @classmethod
     def validate_subscription_url(cls, value: str) -> str:
         if any(char.isspace() for char in value):
-            raise ValueError("A valid HTTPS subscription URL is required")
+            raise ValueError("Введите корректную HTTPS-ссылку подписки")
         parsed = urlsplit(value)
         if parsed.scheme != "https" or not parsed.netloc or not parsed.path:
-            raise ValueError("A valid HTTPS subscription URL is required")
+            raise ValueError("Введите корректную HTTPS-ссылку подписки")
         return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", ""))
 
 
@@ -47,6 +47,8 @@ class RenewalOfferResponse(BaseModel):
 
 class RenewalOffersResponse(BaseModel):
     plan_name: str
+    subscription_status: str
+    expire_at: datetime
     offers: list[RenewalOfferResponse]
 
 
@@ -66,3 +68,5 @@ class RenewalPaymentResponse(BaseModel):
 class RenewalPaymentStatusResponse(BaseModel):
     payment_id: str
     status: str
+    subscription_status: str
+    expire_at: datetime
