@@ -7,6 +7,7 @@ from uuid import UUID
 from dishka import FromDishka
 from dishka.integrations.fastapi import inject
 from fastapi import APIRouter, Header, HTTPException, Request, status
+from loguru import logger
 from redis.asyncio import Redis
 
 from src.application.common.dao import PaymentGatewayDao, SubscriptionDao, TransactionDao, UserDao
@@ -18,7 +19,11 @@ from src.application.use_cases.gateways.commands.payment import (
     ProcessPayment,
     ProcessPaymentDto,
 )
-from src.application.use_cases.plan.queries.match import MatchPlan, MatchPlanDto
+from src.application.use_cases.plan.queries.match import (
+    MatchPlan,
+    MatchPlanDto,
+    find_plan_by_snapshot_id,
+)
 from src.application.use_cases.user.queries.plans import GetAvailablePlans
 from src.core.constants import TTL_1H, TTL_10M, TTL_30M
 from src.core.enums import PaymentGatewayType, PurchaseType, TransactionStatus
@@ -66,7 +71,7 @@ async def _enforce_resolve_rate_limit(redis: Redis, request: Request) -> None:
     if attempts > RESOLVE_ATTEMPTS:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many attempts. Try again later.",
+            detail="Слишком много попыток. Попробуйте ещё раз через 10 минут.",
         )
 
 
@@ -75,7 +80,7 @@ async def _load_session(redis: Redis, token: str) -> dict[str, int]:
     if not raw:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Renewal session is invalid or expired",
+            detail="Сессия продления недействительна или истекла. Введите ссылку ещё раз.",
         )
     try:
         data = json.loads(raw)
@@ -83,7 +88,7 @@ async def _load_session(redis: Redis, token: str) -> dict[str, int]:
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Renewal session is invalid or expired",
+            detail="Сессия продления недействительна или истекла. Введите ссылку ещё раз.",
         ) from e
 
 
@@ -104,7 +109,7 @@ async def _load_context(
     ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Subscription is no longer available for renewal",
+            detail="Эта подписка больше недоступна для продления.",
         )
     return user, subscription
 
@@ -117,12 +122,24 @@ async def _matched_plan(
 ) -> PlanDto:
     plans = await get_plans.system(user)
     plan = await match.system(MatchPlanDto(plan_snapshot=subscription.plan_snapshot, plans=plans))
-    if not plan:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="This subscription plan is not currently available for renewal",
+    if plan:
+        return plan
+
+    # Keep web renewal consistent with the Telegram flow: an administrator may
+    # update a plan after it was purchased. The plan ID still identifies the
+    # intended plan, while a new snapshot is created for the renewal itself.
+    modified_plan = find_plan_by_snapshot_id(subscription.plan_snapshot, plans)
+    if modified_plan:
+        logger.info(
+            f"{user.log} Plan '{subscription.plan_snapshot.id}' was modified, "
+            "allowing web renewal with updated data"
         )
-    return plan
+        return modified_plan
+
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail="Тариф этой подписки сейчас недоступен для продления.",
+    )
 
 
 @router.post("/resolve", response_model=RenewalSessionResponse)
@@ -137,12 +154,12 @@ async def resolve_subscription(
     await _enforce_resolve_rate_limit(redis, request)
     subscription = await subscription_dao.get_current_by_url(body.subscription_url)
     if not subscription:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subscription not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Подписка не найдена.")
 
     user = await user_dao.get_by_id(subscription.user_id)
     current = await subscription_dao.get_current(subscription.user_id)
     if not user or user.is_blocked or not current or current.id != subscription.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subscription not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Подписка не найдена.")
 
     token = secrets.token_urlsafe(32)
     await redis.set(
@@ -203,7 +220,12 @@ async def get_renewal_offers(
         if prices:
             offers.append(RenewalOfferResponse(duration_days=duration.days, prices=prices))
 
-    return RenewalOffersResponse(plan_name=plan.name, offers=offers)
+    return RenewalOffersResponse(
+        plan_name=plan.name,
+        subscription_status=subscription.current_status.value,
+        expire_at=subscription.expire_at,
+        offers=offers,
+    )
 
 
 @router.post("/payments", response_model=RenewalPaymentResponse)
@@ -233,7 +255,7 @@ async def create_renewal_payment(
     if not await redis.set(lock_key, "1", ex=60, nx=True):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="This payment request is already being processed",
+            detail="Этот платёж уже создаётся. Подождите несколько секунд.",
         )
 
     try:
@@ -242,7 +264,7 @@ async def create_renewal_payment(
         if not duration:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Plan duration not found",
+                detail="Выбранный срок продления недоступен.",
             )
         gateway = await payment_gateway_dao.get_by_type(body.gateway_type)
         if (
@@ -254,7 +276,7 @@ async def create_renewal_payment(
         ):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Payment gateway is unavailable",
+                detail="Этот способ оплаты сейчас недоступен.",
             )
 
         pricing = pricing_service.calculate(
@@ -305,11 +327,13 @@ async def get_renewal_payment_status(
     subscription_dao: FromDishka[SubscriptionDao],
     transaction_dao: FromDishka[TransactionDao],
 ) -> RenewalPaymentStatusResponse:
-    user, _ = await _load_context(redis, renewal_token, user_dao, subscription_dao)
+    user, subscription = await _load_context(redis, renewal_token, user_dao, subscription_dao)
     transaction = await transaction_dao.get_by_payment_id(payment_id)
     if not transaction or transaction.user_id != user.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Платёж не найден.")
     return RenewalPaymentStatusResponse(
         payment_id=str(transaction.payment_id),
         status=transaction.status.value,
+        subscription_status=subscription.current_status.value,
+        expire_at=subscription.expire_at,
     )
